@@ -7,8 +7,6 @@
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤖</text></svg>">
 
   <style>
-    /* ... votre CSS reste inchangé ... */
-    /* (copiez-collez l'intégralité de votre bloc <style>) */
     :root {
       --bg-primary: #0a0f1e;
       --bg-secondary: #111827;
@@ -172,29 +170,6 @@
     }
     .btn-danger:hover:not(:disabled) { background-color: var(--btn-danger-hover); }
 
-    .file-input {
-      width: 100%;
-      padding: 8px 12px;
-      background: var(--bg-tertiary);
-      color: var(--text-secondary);
-      border: 1px solid var(--border-color);
-      border-radius: 8px;
-      cursor: pointer;
-    }
-    .file-input::file-selector-button {
-      margin-right: 12px;
-      padding: 6px 12px;
-      background-color: #164e63;
-      color: var(--text-cyan);
-      border: none;
-      border-radius: 6px;
-      font-weight: 600;
-      cursor: pointer;
-    }
-    .file-input::file-selector-button:hover {
-      background-color: #1c4052;
-    }
-
     .label {
       display: block;
       margin-bottom: 8px;
@@ -317,23 +292,7 @@
   <main>
     <div class="text-center mb-6">
       <h1 class="text-3xl font-bold text-cyan-glow">Comparateur Multi-IA</h1>
-      <p class="text-gray-400 text-sm" id="global-status">Chargez vos fichiers pour commencer.</p>
-    </div>
-
-    <div class="card mb-8">
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-        <div>
-          <label class="label">Fichier modèles (models.csv)</label>
-          <input type="file" id="modelsFileInput" accept=".csv" class="file-input" />
-        </div>
-        <div>
-          <label class="label">Clé API (ai_key.csv)</label>
-          <input type="file" id="apiKeyFileInput" accept=".csv" class="file-input" />
-        </div>
-      </div>
-      <div class="text-center">
-        <button onclick="loadConfigFiles()" id="btnLoad" class="btn btn-primary">Charger la configuration</button>
-      </div>
+      <p class="text-gray-400 text-sm" id="global-status">Chargement des modèles...</p>
     </div>
 
     <div id="controlSection" style="display:none;">
@@ -385,10 +344,6 @@
             <label class="label">Afficher un modèle en grand</label>
             <select id="modelSelectExpanded" class="custom-input w-full sm:w-auto">
               <option value="">Sélectionnez un modèle...</option>
-              <option value="ai1">Modèle 1</option>
-              <option value="ai2">Modèle 2</option>
-              <option value="ai3">Modèle 3</option>
-              <option value="ai4">Modèle 4</option>
             </select>
           </div>
           <button onclick="toggleExpandedView()" id="toggle-expanded-btn" class="btn btn-secondary w-full sm:w-auto">Afficher</button>
@@ -406,16 +361,14 @@
   </main>
 
   <footer>
-    <p>&copy; 2025 Mon App IA by Miles. Connecté directement à OpenRouter.</p>
+    <p>&copy; 2025 Mon App IA by Miles. Connecté via proxy sécurisé.</p>
   </footer>
 
   <script>
-    // Correction de l'URL (suppression de l'espace finale)
-    const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+    const MODELS_CSV_URL = 'https://raw.githubusercontent.com/IVIiles/comparateur-ia/main/models.csv';
+    const API_ASK_ENDPOINT = '/api/ask';
 
-    // ... le reste de votre code JavaScript reste inchangé ...
     let modelsList = [];
-    let apiKey = '';
     const AI_PANELS = [
       { id: 'ai1', name: 'Modèle 1', model: null, conversation: [] },
       { id: 'ai2', name: 'Modèle 2', model: null, conversation: [] },
@@ -423,8 +376,6 @@
       { id: 'ai4', name: 'Modèle 4', model: null, conversation: [] },
     ];
     const MAX_RETRIES = 3;
-
-    // États pour l'affichage élargi
     let expandedPanelId = null;
     let isExpandedViewOpen = false;
 
@@ -435,48 +386,24 @@
         .filter(line => line && !line.startsWith('#'));
     }
 
-    async function loadFileAsText(file) {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result.trim());
-        reader.onerror = reject;
-        reader.readAsText(file);
-      });
-    }
-
-    async function loadConfigFiles() {
-      const modelsFile = document.getElementById('modelsFileInput').files[0];
-      const keyFile = document.getElementById('apiKeyFileInput').files[0];
+    async function loadModelsFromGitHub() {
       const status = document.getElementById('global-status');
-
-      if (!modelsFile || !keyFile) {
-        status.textContent = "Veuillez sélectionner les deux fichiers.";
-        status.className = "text-error text-sm";
-        return;
-      }
-
       try {
-        const modelsText = await loadFileAsText(modelsFile);
-        const keyText = await loadFileAsText(keyFile);
-
-        modelsList = parseCSV(modelsText);
-        apiKey = keyText;
-        if (!apiKey.toLowerCase().startsWith('bearer ')) {
-          apiKey = 'Bearer ' + apiKey;
-        }
-
-        if (modelsList.length === 0) throw new Error("Aucun modèle trouvé dans models.csv");
-        if (!apiKey) throw new Error("Clé API vide");
+        const res = await fetch(MODELS_CSV_URL);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const text = await res.text();
+        modelsList = parseCSV(text);
+        if (modelsList.length === 0) throw new Error("Aucun modèle trouvé");
 
         document.querySelector('#controlSection').style.display = 'block';
         renderPanels();
         setupModelSelects();
-        status.textContent = "✅ Prêt. Connecté à OpenRouter.";
+        status.textContent = "✅ Prêt. Modèles chargés depuis GitHub.";
         status.className = "text-success text-sm";
         document.getElementById('btnSend').disabled = false;
         document.getElementById('btnContinue').disabled = false;
       } catch (e) {
-        status.textContent = "❌ Erreur : " + e.message;
+        status.textContent = "❌ Erreur : " + (e.message || "Impossible de charger models.csv");
         status.className = "text-error text-sm";
       }
     }
@@ -498,6 +425,9 @@
     }
 
     function setupModelSelects() {
+      const expandedSelect = document.getElementById('modelSelectExpanded');
+      expandedSelect.innerHTML = '<option value="">Sélectionnez un modèle...</option>';
+
       AI_PANELS.forEach((panel, index) => {
         const select = document.getElementById(`${panel.id}ModelSelect`);
         select.innerHTML = '';
@@ -514,6 +444,11 @@
         panel.model = modelsList[defaultIndex];
         panel.name = select.options[defaultIndex].textContent;
         select.disabled = false;
+
+        const expandedOpt = document.createElement('option');
+        expandedOpt.value = panel.id;
+        expandedOpt.textContent = panel.name;
+        expandedSelect.appendChild(expandedOpt);
       });
     }
 
@@ -562,14 +497,9 @@
 
       for (let i = 0; i < MAX_RETRIES; i++) {
         try {
-          const res = await fetch(OPENROUTER_URL, {
+          const res = await fetch(API_ASK_ENDPOINT, {
             method: 'POST',
-            headers: {
-              'Authorization': apiKey,
-              'Content-Type': 'application/json',
-              'HTTP-Referer': window.location.origin, // Important pour OpenRouter
-              'X-Title': 'Comparateur IA Vercel'
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               model: panel.model,
               messages: currentConv
@@ -589,9 +519,8 @@
           statusLabel.textContent = "✅ Réponse reçue";
           statusLabel.className = "status-text text-success";
 
-          // Si ce panneau est actuellement affiché en grand, mettre à jour l'affichage élargi
           if (isExpandedViewOpen && expandedPanelId === panel.id) {
-             document.getElementById('expanded-response-box').textContent = reply;
+            document.getElementById('expanded-response-box').textContent = reply;
           }
           return;
         } catch (e) {
@@ -670,35 +599,35 @@
       document.getElementById('global-status').className = "text-warning text-sm";
     }
 
-    // --- Fonctions pour l'affichage élargi ---
     function toggleExpandedView() {
-        const selectElement = document.getElementById('modelSelectExpanded');
-        const selectedValue = selectElement.value;
+      const selectElement = document.getElementById('modelSelectExpanded');
+      const selectedValue = selectElement.value;
 
-        if (!selectedValue) {
-            alert("Veuillez d'abord sélectionner un modèle.");
-            return;
-        }
+      if (!selectedValue) {
+        alert("Veuillez d'abord sélectionner un modèle.");
+        return;
+      }
 
-        expandedPanelId = selectedValue;
-        const panel = AI_PANELS.find(p => p.id === expandedPanelId);
-        if (panel) {
-            // Mettre à jour le titre
-            document.getElementById('expanded-panel-title').textContent = panel.name;
-            // Mettre à jour le contenu avec la réponse actuelle du panneau
-            const currentResponse = document.getElementById(`${expandedPanelId}Response`).textContent;
-            document.getElementById('expanded-response-box').textContent = currentResponse;
-            // Afficher la zone
-            document.getElementById('expanded-panel-container').style.display = 'block';
-            isExpandedViewOpen = true;
-        }
+      expandedPanelId = selectedValue;
+      const panel = AI_PANELS.find(p => p.id === expandedPanelId);
+      if (panel) {
+        document.getElementById('expanded-panel-title').textContent = panel.name;
+        const currentResponse = document.getElementById(`${expandedPanelId}Response`).textContent;
+        document.getElementById('expanded-response-box').textContent = currentResponse;
+        document.getElementById('expanded-panel-container').style.display = 'block';
+        isExpandedViewOpen = true;
+      }
     }
 
     function closeExpandedView() {
-        document.getElementById('expanded-panel-container').style.display = 'none';
-        isExpandedViewOpen = false;
-        expandedPanelId = null;
+      document.getElementById('expanded-panel-container').style.display = 'none';
+      isExpandedViewOpen = false;
+      expandedPanelId = null;
     }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      loadModelsFromGitHub();
+    });
   </script>
 </body>
 </html>
