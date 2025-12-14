@@ -9,7 +9,7 @@ export default async function handler(req) {
 
   const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
   if (!OPENROUTER_API_KEY) {
-    console.error('Clé API manquante dans les variables d’environnement');
+    console.error('Clé API manquante');
     return new Response(JSON.stringify({ error: 'Erreur serveur : clé manquante' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
@@ -18,19 +18,26 @@ export default async function handler(req) {
 
   let body;
   try {
-    body = await req.json();
+    const text = await req.text(); // ✅ req.text(), pas req.json()
+    if (!text) {
+      return new Response(JSON.stringify({ error: 'Corps vide' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+    }
+    body = JSON.parse(text);
   } catch (e) {
-    return new Response(JSON.stringify({ error: 'JSON invalide dans la requête' }), {
+    console.error('Erreur parsing JSON:', e.message);
+    return new Response(JSON.stringify({ error: 'JSON invalide' }), {
       status: 400,
       headers: { 'Content-Type': 'application/json' }
     });
   }
 
-  // 🔥 URLs CORRIGÉES : aucun espace en fin de chaîne !
-  const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+  const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'; // ✅ Pas d’espace !
   const origin = req.headers.get('origin') || 'https://comparateur-ia-self.vercel.app';
 
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 25000); // 25s timeout
+
     const proxyRes = await fetch(OPENROUTER_URL, {
       method: 'POST',
       headers: {
@@ -40,12 +47,14 @@ export default async function handler(req) {
         'X-Title': 'Comparateur IA Vercel'
       },
       body: JSON.stringify(body),
-      // 🔥 Ajout d’un timeout explicite pour éviter les hangs
-      signal: AbortSignal.timeout(25000) // 25 secondes max
+      signal: controller.signal
     });
 
-    const proxyBody = await proxyRes.text();
-    return new Response(proxyBody, {
+    clearTimeout(timeoutId);
+
+    // Forward la réponse exacte
+    const proxyText = await proxyRes.text();
+    return new Response(proxyText, {
       status: proxyRes.status,
       headers: {
         'Content-Type': proxyRes.headers.get('content-type') || 'application/json',
@@ -53,14 +62,16 @@ export default async function handler(req) {
       }
     });
   } catch (error) {
-    console.error('Erreur dans /api/ask :', error.message || error);
-    if (error.name === 'TimeoutError') {
+    console.error('Erreur proxy:', error.message || error);
+
+    if (error.name === 'AbortError') {
       return new Response(JSON.stringify({ error: 'Timeout: OpenRouter ne répond pas' }), {
         status: 504,
         headers: { 'Content-Type': 'application/json' }
       });
     }
-    return new Response(JSON.stringify({ error: 'Erreur proxy inattendue' }), {
+
+    return new Response(JSON.stringify({ error: 'Erreur serveur inattendue' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
     });
