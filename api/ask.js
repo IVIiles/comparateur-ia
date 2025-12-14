@@ -1,43 +1,30 @@
 // api/ask.js
-export default async function handler(req) {
+export default async function handler(req, res) {
   if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'Méthode non autorisée' }), {
-      status: 405,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    return res.status(405).json({ error: 'Méthode non autorisée' });
   }
 
   const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
   if (!OPENROUTER_API_KEY) {
     console.error('Clé API manquante');
-    return new Response(JSON.stringify({ error: 'Erreur serveur : clé manquante' }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    return res.status(500).json({ error: 'Erreur serveur : clé manquante' });
   }
 
   let body;
   try {
-    const text = await req.text(); // ✅ req.text(), pas req.json()
-    if (!text) {
-      return new Response(JSON.stringify({ error: 'Corps vide' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+    body = req.body;
+    if (typeof body === 'string') {
+      body = JSON.parse(body);
     }
-    body = JSON.parse(text);
   } catch (e) {
     console.error('Erreur parsing JSON:', e.message);
-    return new Response(JSON.stringify({ error: 'JSON invalide' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    return res.status(400).json({ error: 'JSON invalide' });
   }
 
-  const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'; // ✅ Pas d’espace !
-  const origin = req.headers.get('origin') || 'https://comparateur-ia-self.vercel.app';
+  const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+  const origin = req.headers.origin || 'https://comparateur-ia-self.vercel.app';
 
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 25000); // 25s timeout
-
     const proxyRes = await fetch(OPENROUTER_URL, {
       method: 'POST',
       headers: {
@@ -46,34 +33,18 @@ export default async function handler(req) {
         'HTTP-Referer': origin,
         'X-Title': 'Comparateur IA Vercel'
       },
-      body: JSON.stringify(body),
-      signal: controller.signal
+      body: JSON.stringify(body)
     });
 
-    clearTimeout(timeoutId);
+    const proxyData = await proxyRes.text();
 
-    // Forward la réponse exacte
-    const proxyText = await proxyRes.text();
-    return new Response(proxyText, {
-      status: proxyRes.status,
-      headers: {
-        'Content-Type': proxyRes.headers.get('content-type') || 'application/json',
-        'Access-Control-Allow-Origin': origin
-      }
-    });
+    // Forward la réponse exacte d'OpenRouter
+    res.status(proxyRes.status);
+    res.setHeader('Content-Type', proxyRes.headers.get('content-type') || 'application/json');
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.send(proxyData);
   } catch (error) {
     console.error('Erreur proxy:', error.message || error);
-
-    if (error.name === 'AbortError') {
-      return new Response(JSON.stringify({ error: 'Timeout: OpenRouter ne répond pas' }), {
-        status: 504,
-        headers: { 'Content-Type': 'application/json' }
-      });
-    }
-
-    return new Response(JSON.stringify({ error: 'Erreur serveur inattendue' }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    res.status(500).json({ error: 'Erreur serveur inattendue' });
   }
 }
